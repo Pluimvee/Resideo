@@ -7,8 +7,8 @@
   
   https://en.gassensor.com.cn/Product_files/Specifications/CM1106-C%20Single%20Beam%20NDIR%20CO2%20Sensor%20Module%20Specification.pdf
  */
-
 #include <Arduino.h>
+#include "Sensors.h"
 
 #define PIN_SDA D2 // GPIO4
 #define PIN_SCL D1 // GPIO5
@@ -24,13 +24,18 @@ static volatile byte data = 0;        // the byte under construction, which will
 static volatile bool writing = true;  // is the master reading or writing to the device
 
 ////////////////////////////
+#define LOG_REMOTE
+#define LOG_LEVEL 1
+#include <Logging.h>
+
+////////////////////////////
 //// Interrupt handlers
 /////////////////////////////
 
 // Rising SCL makes reading the SDA
 void IRAM_ATTR i2cTriggerOnRaisingSCL() 
 {
-  if (i2cIdle)    // we didnt get a strat signal yet
+  if (i2cIdle)    // we didnt get a start signal yet
     return;
 
 	//get the value from SDA
@@ -113,10 +118,10 @@ void IRAM_ATTR i2cTriggerOnChangeSDA()
 	}
 }
 
-/////////////////////////////////
-////  MAIN entry point of the program
-/////////////////////////////////
-void setup() 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////
+bool CHT8305::setup() 
 {
 	//Define pins for SCL, SDA
   pinMode(PIN_SCL, INPUT_PULLUP);   
@@ -130,28 +135,120 @@ void setup()
   attachInterrupt(PIN_SCL, i2cTriggerOnRaisingSCL, RISING); //trigger for reading data from SDA
   attachInterrupt(PIN_SDA, i2cTriggerOnChangeSDA,  CHANGE); //for I2C START and STOP
 
-	Serial.begin(115200);
+  return true;
 }
 
-/**
- * LOOP
- */
-void loop() 
-{
-  Serial.printf("Device address 0x%02X, w? %d, ptr %02X", device_address, writing, device_register_ptr);
-
-  Serial.printf("\t First 4 bytes 0x%02X\t0x%02X\t0x%02X\t0x%02X", device_register[0], device_register[1], device_register[2], device_register[3]);
-  
-  double T = (device_register[0] <<8 | device_register[1]);
+///////////////////////////////////////////////////////////////////////////////////////////////////
+float CHT8305::temperature() { 
+  float T = (device_register[0] <<8 | device_register[1]);
   T = (T * 165.0 / 65535.0) - 40.0;
   T -= 1.4;   // as seen on display
 
-  double H = (device_register[2] <<8 | device_register[3]);
+  return T;
+}
+
+float CHT8305::humidity() { 
+  float H = (device_register[2] <<8 | device_register[3]);
   H = (H * 100.0 / 65535.0);
   H += 2.0;   // as seen on display
+ 
+  return H;
+}
 
-  Serial.printf("\tTemp: %.1f\t Humi: %.1f", T, H);
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// The expected response consists of 8 bytes
+// | 0    | 1   | 2   | 3     | 4     | 5     | 6     | 7  |
+// | HEAD | LEN | CMD | DATA1 | DATA2 | DATA3 | DATA4 | CS |
+//
+// PPM = DATA1 << 8 | DATA2
+// DATA3  b7    b6      b5      b4          b3            b2            b1            b0
+//      1 na    drift   aging   non-cali    below_range   above_range   sensor_error  pre-heating
+//      0 na    normal  normal  calibrated  normal        normal        normal
+//  DATA4 reserved
+//
+#define NUM_MSG_BYTES 8
+uint16_t cached_ppm; // cached value
 
-  Serial.println();
-  delay(5000);
+// Checksum: 256-(HEAD+LEN+CMD+DATA)%256
+uint8_t calcCRC(uint8_t* response, size_t len) 
+{
+  uint8_t crc = 0;
+  // last byte of response is checksum, don't calculate it
+  for (int i = 0; i < len - 1; i++) {
+      crc -= response[i];
+  }
+  return crc;
+}
+
+void getCO2PPM() 
+{
+    uint8_t response[NUM_MSG_BYTES] = {0};
+
+    // All read responses start with 0x16
+    // The payload length for the Co2 message is 0x05
+    // The command for the Co2 message is 0x01
+    uint8_t expectedHeader[] = {0x16, 0x05, 0x01};
+    int currentPos = 0;
+
+    int availableBytes = Serial.available();
+
+    if (availableBytes < NUM_MSG_BYTES) {   // can there be a complete message available?
+        return;
+    }
+
+    // We are only interested in the last message, drop all others
+    while (availableBytes >= (2*NUM_MSG_BYTES)) {
+        Serial.readBytes(response, NUM_MSG_BYTES);
+        availableBytes = Serial.available();
+    }
+
+    // Find the expected header
+    while (currentPos < sizeof(expectedHeader)) {
+        if (Serial.available()) {
+            Serial.readBytes(response+currentPos, 1);
+        } else {
+            return;
+        }
+        
+        if (response[currentPos] == expectedHeader[currentPos]) {
+            currentPos++;
+        }
+    }
+
+    // If present, read the data and checksum
+    if (Serial.available() >= NUM_MSG_BYTES - sizeof(expectedHeader)) {
+        Serial.readBytes(response+currentPos, NUM_MSG_BYTES - sizeof(expectedHeader));
+    } else {
+        ERROR("The last message in the buffer was not complete");
+        return;
+    }
+
+    // Process the Co2 value and checksum
+    uint8_t checksum = calcCRC(response, sizeof(response));
+    int16_t ppm = response[3] << 8 | response[4];
+    if (response[7] == checksum) {
+        INFO("CM1106 Received CO2=%uppm DF3=%02X DF4=%02X", ppm, response[5], response[6]);
+        cached_ppm = ppm;
+    } else {
+        ERROR("Got wrong UART checksum: 0x%02X - Calculated: 0x%02X, ppm data: %u", response[7], checksum, ppm);
+        return;
+    }
+}
+
+bool CM1106::setup() 
+{
+	Serial.begin(9600);
+  cached_ppm = 0;
+  return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+uint16_t CM1106::ppm() 
+{
+  getCO2PPM();
+  return cached_ppm;
 }

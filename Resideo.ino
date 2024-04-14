@@ -60,20 +60,19 @@ void mqtt_connect() {
 ///////////////////////////////////////////////////////////////////////////////////////
 void setup() 
 {
-  Serial.begin(115200);
   INFO("\nResideo CO2 sensor\n");
   wifi_connect();
   // start MQTT to enable remote logging asap
   INFO("Connecting to MQTT server %s\n", mqtt_server);
   uint8_t mac[6];
   WiFi.macAddress(mac);
-  resideo.begin(mac, &mqtt);              // 5) make sure the device gets a unique ID (based on mac address)
+  resideo.setup(mac, &mqtt);              // 5) make sure the device gets a unique ID (based on mac address)
   mqtt.onConnected(mqtt_connect);           // register function called when newly connected
   mqtt.begin(mqtt_server, mqtt_port, mqtt_user, mqtt_passwd);  // 
 
   INFO("Initialize OTA\n");
   ArduinoOTA.setPort(8266);
-  ArduinoOTA.setHostname("RemoteTempSensor");
+  ArduinoOTA.setHostname("ResideoMod");
   ArduinoOTA.setPassword(OTA_PASS);
 
   ArduinoOTA.onStart([]() {
