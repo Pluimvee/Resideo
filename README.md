@@ -9,6 +9,7 @@ This code is running on an ESP8266 module ESP-12F
 # Dependencies
 Uses the Home Assistant MQTT Library 
 - https://github.com/dawidchyrzynski/arduino-home-assistant
+
 Some private helpers
 - https://github.com/Pluimvee/Pluimvee-ArduinoLib/blob/master/src/DatedVersion.h
 - https://github.com/Pluimvee/Pluimvee-ArduinoLib/blob/master/src/Logging.h
