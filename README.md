@@ -49,7 +49,7 @@ My graditude to the research and work of the following tweakers:
 - Bartvb (https://gathering.tweakers.net/forum/list_message/78228570#78228570)
 - Soepstengel (https://gathering.tweakers.net/forum/list_message/77882454#77882454)
 - Skix_Aces (https://gathering.tweakers.net/forum/list_message/78427188#78427188)
-- ThinkPad (https://tweakers.net/gallery/146731/)
+- ThinkPad (https://gathering.tweakers.net/forum/list_message/77642990#77642990)
 
  
 ![20240413_135641](https://github.com/Pluimvee/Resideo/assets/124380379/2ebb0d7c-32a8-4dca-b83b-b1bceb610ddd)
