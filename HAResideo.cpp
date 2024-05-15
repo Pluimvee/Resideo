@@ -8,7 +8,6 @@
 #include <String.h>
 #include <DatedVersion.h>
 DATED_VERSION(0, 1)
-#define DEVICE_NAME  "Resideo"
 #define DEVICE_MODEL "Resideo Mod esp8266"
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -29,9 +28,9 @@ DATED_VERSION(0, 1)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////
 HAResideo::HAResideo()
-: CONSTRUCT_P0(co2_level), CONSTRUCT_P1(humidity), CONSTRUCT_P1(resido_temp)
+: CONSTRUCT_P0(co2_level), CONSTRUCT_P1(humidity), CONSTRUCT_P1(temperature)
 {
-  CONFIGURE(resido_temp,"Temperature","temperature",    "thermometer",    "°C");
+  CONFIGURE(temperature,"Temperature","temperature",    "thermometer",    "°C");
   CONFIGURE(co2_level,  "CO2",        "carbon_dioxide", "molecule-co2",   "ppm");
   CONFIGURE(humidity,   "Humidity",   "humidity",       "water-percent",  "%");
 }
@@ -41,14 +40,15 @@ HAResideo::HAResideo()
 ////////////////////////////////////////////////////////////////////////////////////////////
 bool HAResideo::setup(const byte mac[6], HAMqtt *mqtt) 
 {
-  setUniqueId(mac, 6);c:\Users\erikv\OneDrive\Archive\Erik\Hobby\Domotica\Resideo\LICENSE
+  enableExtendedUniqueIds();  
+  setUniqueId(mac, 6);
   setManufacturer("InnoVeer");
   setName(DEVICE_NAME);
   setSoftwareVersion(VERSION);
   setModel(DEVICE_MODEL);
 
   mqtt->addDeviceType(&humidity);  
-  mqtt->addDeviceType(&resido_temp);  
+  mqtt->addDeviceType(&temperature);  
   mqtt->addDeviceType(&co2_level);  
 
   CHT8305::setup();
@@ -63,16 +63,19 @@ bool HAResideo::setup(const byte mac[6], HAMqtt *mqtt)
 bool HAResideo::loop()
 {
   using periodic = esp8266::polledTimeout::periodicMs;
-  static periodic nextPing(1000);
+  static periodic nextPing(1500);
 
   if (nextPing) {
-    INFO("T:%.1f   H:%.1f   C:%.1u\n", CHT8305::temperature(), CHT8305::humidity(), CM1106::ppm());
+    float T = CHT8305::temperature(), H = CHT8305::humidity();
+    uint16_t P = CM1106::ppm();
 
-    resido_temp.setValue(CHT8305::temperature());
-    humidity.setValue(CHT8305::humidity());
-    co2_level.setValue(CM1106::ppm());
+    INFO("[%s] -> T:%.1f   H:%.1f   C:%.1u\n", getUniqueId(), T, H, P);
+
+    temperature.setValue(T);
+    humidity.setValue(H);
+    co2_level.setValue(P);
   }
-  return false;
+  return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////

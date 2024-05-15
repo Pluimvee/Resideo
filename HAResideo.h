@@ -6,6 +6,7 @@
 #include <HAMqtt.h>
 #include <device-types\HASensorNumber.h>
 #define SENSOR_COUNT 5   
+#define DEVICE_NAME  "Resideo"
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -17,7 +18,7 @@ public:
 
   HASensorNumber  humidity;
   HASensorNumber  co2_level;
-  HASensorNumber  resido_temp;
+  HASensorNumber  temperature;
   
   bool setup(const byte mac[6], HAMqtt *mqqt);
   bool loop();                                                    

@@ -1,13 +1,19 @@
 /**
   @AUTHOR Pluimvee
- 
-  based on the work of
-  https://github.com/rhmswink/Resideo-R200C2-ESPHome-Mod
-  https://github.com/RobTillaart/CHT8305/tree/master
-  
+
+  Specifications CHT8305 T/H Sensor
+  Oct 2017 rev 1.1 SENSYLINK MIcroelectronics Co. LTD
+  https://www.semiee.com/file/Sensylink/Sensylink-CHT8305.pdf
+
+  Specifications CM1106 CO2-Sensor
   https://en.gassensor.com.cn/Product_files/Specifications/CM1106-C%20Single%20Beam%20NDIR%20CO2%20Sensor%20Module%20Specification.pdf
+ 
+  Based on the work of
+    https://github.com/rhmswink/Resideo-R200C2-ESPHome-Mod
+    https://github.com/RobTillaart/CHT8305/tree/master
  */
 #include <Arduino.h>
+#include <RunningAverage.h>
 #include "Sensors.h"
 
 #define PIN_SDA D2 // GPIO4
@@ -23,16 +29,15 @@ static volatile int byteIdx = 0;      // nr of bytes within tis frame
 static volatile byte data = 0;        // the byte under construction, which will persited in device_register when acknowledged
 static volatile bool writing = true;  // is the master reading or writing to the device
 
-////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
 #define LOG_REMOTE
 #define LOG_LEVEL 1
 #include <Logging.h>
 
-////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
 //// Interrupt handlers
-/////////////////////////////
-
-// Rising SCL makes reading the SDA
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Rising SCL makes us reading the SDA pin
 void IRAM_ATTR i2cTriggerOnRaisingSCL() 
 {
   if (i2cIdle)    // we didnt get a start signal yet
@@ -75,9 +80,9 @@ void IRAM_ATTR i2cTriggerOnRaisingSCL()
         default:
           // it seems that while reading the master signals the slave to stop sending by giving a nack
           // this last byte still needs to be stored in the register
-          // so we ignore here if it was a ack or nack
-          //if (sda ==0)
-          device_register[device_register_ptr++] = data;
+          // remove next line if you want to ignore nack
+          if (sda ==0)
+            device_register[device_register_ptr++] = data;
           break;
       }
 			byteIdx++;  // next byte
@@ -121,6 +126,9 @@ void IRAM_ATTR i2cTriggerOnChangeSDA()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+RunningAverage T_metrics(20);
+RunningAverage H_metrics(20);
+
 bool CHT8305::setup() 
 {
 	//Define pins for SCL, SDA
@@ -131,6 +139,9 @@ bool CHT8305::setup()
   memset((void *) device_register, sizeof(device_register), 0);
 	i2cIdle = true;
 
+//  T_metrics.fillValue(20.0f, T_metrics.getSize());    // fill with 20 degrees
+//  H_metrics.fillValue(40.0f, H_metrics.getSize());    // fill with 40% humidity
+
   //Atach interrupt handlers to the interrupts on GPIOs
   attachInterrupt(PIN_SCL, i2cTriggerOnRaisingSCL, RISING); //trigger for reading data from SDA
   attachInterrupt(PIN_SDA, i2cTriggerOnChangeSDA,  CHANGE); //for I2C START and STOP
@@ -139,21 +150,79 @@ bool CHT8305::setup()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-float CHT8305::temperature() { 
+// Formula on Page Page 10
+// T(C) = 165 * rawdata / 2^16-1 - 40
+// However on page 12
+// T(C) = 175 * rawdata / 2^16-1 - 45
+///////////////////////////////////////////////////////////////////////////////////////////////////
+float CHT8305::temperature() 
+{ 
   float T = (device_register[0] <<8 | device_register[1]);
-  T = (T * 165.0 / 65535.0) - 40.0;
-  T -= 1.4;   // as seen on display
+//  T = (T * 165.0 / 65535.0) - 40.0;
+//  T -= 1.4;   // as seen on display -> problably using the formula on page 12
+//  T -= 5.0;   // as calibrated with other sensors (eg the display measurement is also incorrect)
+  
+  T = (T * 165.0 / 65535.0) - 46.0;
 
+  if (!T_metrics.bufferIsFull()) 
+  {
+    T_metrics.add(T);
+    return T;
+  }
+  float average = T_metrics.getAverage();
+  float std_dev = T_metrics.getStandardDeviation();
+  float min     = T_metrics.getMinInBuffer();
+  float max     = T_metrics.getMaxInBuffer();
+
+  std_dev = std_dev * 5 + 0.1f;  // maximum deviation = 10 times the std_deviation
+  float diff = abs(T-average);
+  if (diff >= std_dev) {
+    ERROR("T-SPIKE ! -> T: %.2f\tmin: %.2f\tmax: %.2f\taverage: %.2f\tstd-err: %.2f\tstd-dev: %.2f\n", T, min, max, average, T_metrics.getStandardError(), std_dev);
+    T = (T>average ? max+std_dev : min-std_dev);
+  }
+  T_metrics.add(T);
   return T;
 }
 
-float CHT8305::humidity() { 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Formula on Page Page 11
+// RH(%) = 100% * rawdata / 2^16-1
+///////////////////////////////////////////////////////////////////////////////////////////////////
+float CHT8305::humidity() 
+{ 
   float H = (device_register[2] <<8 | device_register[3]);
   H = (H * 100.0 / 65535.0);
   H += 2.0;   // as seen on display
- 
+
+  if (!H_metrics.bufferIsFull()) 
+  {
+    H_metrics.add(H);
+    return H;
+  }
+  float average = H_metrics.getAverage();
+  float std_dev = H_metrics.getStandardDeviation();
+  float min     = H_metrics.getMinInBuffer();
+  float max     = H_metrics.getMaxInBuffer();
+
+  std_dev = std_dev * 5 + 0.1f;  // maximum deviation = 10 times the std_deviation
+  float diff = abs(H-average);
+  if (diff >= std_dev) {
+    ERROR("H-SPIKE ! -> H: %.2f\tmin: %.2f\tmax: %.2f\taverage: %.2f\tstd-err: %.2f\tstd-dev: %.2f\n", H, min, max, average, H_metrics.getStandardError(), std_dev);
+    H = (H>average ? max+std_dev : min-std_dev);
+  }
+  H_metrics.add(H);
   return H;
 }
+/*
+on regular basis we get humidity readings of 77,*%. 
+reg[2] = 0xC1 reg[3] = 0x11 49425 -> 77,4
+reg[2] = 0xC0 reg[3] = 0x00 49152 -> 77,0
+
+on regular basis we get temp readings of 89/90 degrees. 
+reg[0] = 0xCB reg[1] = 0xDD 52189 -> 90
+reg[0] = 0xCB reg[1] = 0xBB 52155 -> 89,9
+
+*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////

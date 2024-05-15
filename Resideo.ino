@@ -29,7 +29,7 @@ HAMqtt            mqtt(socket, resideo, SENSOR_COUNT);  // Home Assistant MTTQ
 
 void LOG_CALLBACK(char *msg) { 
   LOG_REMOVE_NEWLINE(msg);
-  mqtt.publish("Resideo/log", msg, true); 
+  mqtt.publish(DEVICE_NAME "/log", msg, true); 
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -52,7 +52,7 @@ void wifi_connect()
 ////////////////////////////////////////////////////////////////////////////////////////////
 // MQTT Connect
 void mqtt_connect() {
-  INFO("Resideo v%s saying hello\n", VERSION);
+  INFO(DEVICE_NAME " v%s saying hello\n", VERSION);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -60,26 +60,29 @@ void mqtt_connect() {
 ///////////////////////////////////////////////////////////////////////////////////////
 void setup() 
 {
-  INFO("\nResideo CO2 sensor\n");
   wifi_connect();
-  // start MQTT to enable remote logging asap
-  INFO("Connecting to MQTT server %s\n", mqtt_server);
+
   uint8_t mac[6];
   WiFi.macAddress(mac);
+
   resideo.setup(mac, &mqtt);              // 5) make sure the device gets a unique ID (based on mac address)
   mqtt.onConnected(mqtt_connect);           // register function called when newly connected
+
+  INFO("Connecting to MQTT server %s\n", mqtt_server);
   mqtt.begin(mqtt_server, mqtt_port, mqtt_user, mqtt_passwd);  // 
 
   INFO("Initialize OTA\n");
+  char hostname[32];
+  sprintf(hostname, "%.18s-%.12s", DEVICE_NAME, resideo.getUniqueId());
   ArduinoOTA.setPort(8266);
-  ArduinoOTA.setHostname("ResideoMod");
+  ArduinoOTA.setHostname(hostname);
   ArduinoOTA.setPassword(OTA_PASS);
 
   ArduinoOTA.onStart([]() {
-    INFO("Starting remote software update");
+    INFO("Starting remote software update on %s", resideo.getUniqueId());
   });
   ArduinoOTA.onEnd([]() {
-    INFO("Remote software update finished");
+    INFO("Remote software update finished for %s", resideo.getUniqueId());
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
   });
