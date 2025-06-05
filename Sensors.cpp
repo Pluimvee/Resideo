@@ -150,7 +150,7 @@ bool CHT8305::setup()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// Formula on Page Page 10
+// Formula on Page Page 11
 // T(C) = 165 * rawdata / 2^16-1 - 40
 // However on page 12
 // T(C) = 175 * rawdata / 2^16-1 - 45
@@ -162,7 +162,7 @@ float CHT8305::temperature()
 //  T -= 1.4;   // as seen on display -> problably using the formula on page 12
 //  T -= 5.0;   // as calibrated with other sensors (eg the display measurement is also incorrect)
   
-  T = (T * 165.0 / 65535.0) - 46.0;
+  T = (T * 165.0 / 65535.0) - 45.8;
 
   if (!T_metrics.bufferIsFull()) 
   {
@@ -181,6 +181,7 @@ float CHT8305::temperature()
     T = (T>average ? max+std_dev : min-std_dev);
   }
   T_metrics.add(T);
+  T = T_metrics.getAverage();
   return T;
 }
 
