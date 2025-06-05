@@ -1,12 +1,10 @@
 /**
-  @AUTHOR Pluimvee
+@AUTHOR Pluimvee
  
-  based on the work of
-  https://github.com/rhmswink/Resideo-R200C2-ESPHome-Mod
-  https://github.com/RobTillaart/CHT8305/tree/master
-  
-  https://en.gassensor.com.cn/Product_files/Specifications/CM1106-C%20Single%20Beam%20NDIR%20CO2%20Sensor%20Module%20Specification.pdf
- */
+based on the work of
+- https://github.com/WhitehawkTailor/I2C-sniffer
+- https://github.com/RobTillaart/CHT8305/tree/master
+**/
 
 #include <Arduino.h>
 
