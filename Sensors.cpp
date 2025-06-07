@@ -62,7 +62,7 @@ void IRAM_ATTR i2cTriggerOnRaisingSCL()
     default:
 		case 0: // data bit
       data = (data << 1) | (sda>0?1:0);
-	  	break;//end of case 0 general
+	   	break;//end of case 0 general
 
 		case 1: //(N)ACK
       switch (byteIdx)
@@ -136,7 +136,7 @@ bool CHT8305::setup()
   pinMode(PIN_SDA, INPUT_PULLUP);
 
   //reset variables
-  memset((void *) device_register, sizeof(device_register), 0);
+  memset((void *) device_register, 0, sizeof(device_register));
 	i2cIdle = true;
 
 //  T_metrics.fillValue(20.0f, T_metrics.getSize());    // fill with 20 degrees
