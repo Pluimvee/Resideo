@@ -1,4 +1,6 @@
 # Honeywell Resideo R200C2-A Mod
+ESPHOME VERSION HERE https://github.com/Pluimvee/esphome-resideo
+
 Connect your Resideo CO2 monitor to Home Automation via MQTT
 This code is running on an ESP8266 module ESP-12F
 - Reading CO2 ppm via RX
